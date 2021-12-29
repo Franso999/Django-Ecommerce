@@ -1,15 +1,19 @@
+# from _typeshed import NoneType
 from django.conf import settings
 from django.contrib import messages
+from django.contrib.auth.models import User
 from django.core.exceptions import ObjectDoesNotExist
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db import models
+from django.forms.utils import ErrorList
 from django.shortcuts import render, get_object_or_404
 from django.views.generic import ListView, DetailView, View
 from django.shortcuts import redirect
 from django.utils import timezone
-from .forms import CheckoutForm, CouponForm, RefundForm
-from .models import Item, OrderItem, Order, BillingAddress, Payment, Coupon, Refund, Category
-from django.http import HttpResponseRedirect
+from .forms import CheckoutForm, CouponForm, RefundForm, BuyersDetailsForm,AddtoCartForm
+from .models import Item, OrderItem, Order, BillingAddress, ShippingAddress, Payment, Coupon, Refund, Category
+from django.http import HttpResponseRedirect, request, HttpResponse
 from django.shortcuts import render_to_response
 
 # Create your views here.
@@ -22,6 +26,25 @@ stripe.api_key = settings.STRIPE_SECRET_KEY
 def create_ref_code():
     return ''.join(random.choices(string.ascii_lowercase + string.digits, k=20))
 
+@login_required
+def Profile(request):
+    
+    instance = get_object_or_404(BillingAddress, user=request.user)
+    form = BuyersDetailsForm( request.POST or None, instance=instance)
+    if request.method == 'POST':
+        if form.is_valid():
+            Profile = form.save(commit=False)
+            Profile.user = request.user
+            Profile.save()
+            return redirect('/profile')
+        else:
+            print('NOT VALID FORM')
+            print(form.errors.values())
+    # if a GET (or any other method) we'll create a blank form
+    else:
+        form = BuyersDetailsForm(request.POST or None, instance=instance)
+
+    return render(request, "profile.html",{'form': form})
 
 class PaymentView(View):
     def get(self, *args, **kwargs):
@@ -35,7 +58,7 @@ class PaymentView(View):
             return render(self.request, "payment.html", context)
         else:
             messages.warning(
-                self.request, "u have not added a billing address")
+                self.request, "u have not added a billing address...")
             return redirect("core:checkout")
 
     def post(self, *args, **kwargs):
@@ -104,12 +127,20 @@ class PaymentView(View):
             messages.error(self.request, "Serious Error occured")
             return redirect("/")
 
+#---- PAYMENT OKAY -----
+def PaymentSuccess(request):
+    return render(request, 'payment_success.html')
+# ---- PAYMENT CANCELLED -----
+def PaymentCancelled(request):
+    return render(request, 'payment_cancelled.html')
+# ---- PAYMENT ERROR -----
+def PaymentError(request):
+    return render(request, 'payment_error.html')
 
 class HomeView(ListView):
     template_name = "index.html"
     queryset = Item.objects.filter(is_active=True)
     context_object_name = 'items'
-
 
 class OrderSummaryView(LoginRequiredMixin, View):
     def get(self, *args, **kwargs):
@@ -123,27 +154,49 @@ class OrderSummaryView(LoginRequiredMixin, View):
             messages.error(self.request, "You do not have an active order")
             return redirect("/")
 
-
 class ShopView(ListView):
     model = Item
     paginate_by = 6
     template_name = "shop.html"
 
-
 class ItemDetailView(DetailView):
     model = Item
     template_name = "product-detail.html"
 
+def ProductDetailView(request,id):
+    object = Item.objects.get(id=id)
 
-# class CategoryView(DetailView):
-#     model = Category
-#     template_name = "category.html"
+    model = Item
+    form = BuyersDetailsForm( request.POST or None)
+    context = {
+        'object':object,
+        'form':form
+    }
+    # def get_absolute_url(self):
+    #     return reverse('article_detail', kwargs={'slug': self.slug})
+    # if request.method == 'POST':
+    #     if form.is_valid():
+    #         Profile = form.save(commit=False)
+    #         Profile.user = request.user
+    #         Profile.save()
+    #         return redirect('product-detail.html')
+    #     else:
+    #         print('NOT VALID FORM')
+    #         print(form.errors.values())
+    # return render(request, "product-detail.html", kwargs={'slug': slug})
+    return render(request, "product-detail.html", context)
 
 class CategoryView(View):
     def get(self, *args, **kwargs):
         category = Category.objects.get(slug=self.kwargs['slug'])
         item = Item.objects.filter(category=category, is_active=True)
+        # Get the items that the customer has in the basket
+        #order = Order.objects.get(user=self.request.user, ordered=False)
+            # context = {
+            #     'object': order
+            # }
         context = {
+            # 'object': order, 
             'object_list': item,
             'category_title': category,
             'category_description': category.description,
@@ -151,9 +204,28 @@ class CategoryView(View):
         }
         return render(self.request, "category.html", context)
 
-
 class CheckoutView(View):
+    print(".....")
+    print("CheckoutView ran")
+    print(".....")
+
+    allBillAddresses = BillingAddress.objects.all()
     def get(self, *args, **kwargs):
+        print("...get ran...")
+        customer=self.request.user
+        # allBillAddresses = BillingAddress.objects.all()
+        # GET THE CUSTOMERS BILLING ADDRESS 
+        allBillAddresses = BillingAddress.objects.filter(user_id=customer.id).order_by('-default')
+        #print(allBillAddresses)
+        # for i in allBillAddresses:
+        #     if i.default == True:
+        #         print('Use this adddress')
+        #         bill_address = 'This'
+            # print(i.default)
+            # print(i.address_type)
+            # print(i.country)
+            # print(i.street_address)
+            # print(i.apartment_address)
         try:
             order = Order.objects.get(user=self.request.user, ordered=False)
             form = CheckoutForm()
@@ -161,74 +233,123 @@ class CheckoutView(View):
                 'form': form,
                 'couponform': CouponForm(),
                 'order': order,
-                'DISPLAY_COUPON_FORM': True
+                'DISPLAY_COUPON_FORM': True,
+                'addresses': allBillAddresses
             }
-            return render(self.request, "checkout.html", context)
+            print('Attempting to set the billing adress to the default address')
+            billing_address = BillingAddress.objects.get(user = self.request.user)
+            #billing_address.save()
+            order.billing_address = billing_address
+                # order.shipping_address = shipping_address
+            order.save()
+            print('Looks like it worked :) !!!')
 
+            return render(self.request, "checkout.html", context)
+        # try:
+        #     order = Order.objects.get(user=self.request.user, ordered=False)
+        #     form = CheckoutForm()
+        #     context = {
+        #         'form': form,
+        #         'couponform': CouponForm(),
+        #         'order': order,
+        #         'DISPLAY_COUPON_FORM': True,
+        #         'addresses': allBillAddresses
+        #     }
+        #     return render(self.request, "checkout.html", context)    
         except ObjectDoesNotExist:
             messages.info(self.request, "You do not have an active order")
             return redirect("core:checkout")
-
+        except: # Dont think this
+            messages.info(self.request, "No info received")
+            return redirect("core:checkout")
+        
     def post(self, *args, **kwargs):
+        print("--- post ran ---")
         form = CheckoutForm(self.request.POST or None)
         try:
             order = Order.objects.get(user=self.request.user, ordered=False)
+            BA = BillingAddress.objects.get(user = self.request.user)
+            print('BA ' + str(BA))
+            print(BA.street_address)
+            print('ID= ' + str(BA.id))
+            print(order.user)
             print(self.request.POST)
+
+       
             if form.is_valid():
                 street_address = form.cleaned_data.get('street_address')
                 apartment_address = form.cleaned_data.get('apartment_address')
-                country = form.cleaned_data.get('country')
+                #country = form.cleaned_data.get('country') ---> Only take SA orders
                 zip = form.cleaned_data.get('zip')
-                # add functionality for these fields
+
+                # TODO 
+                # -------> add functionality for these fields
                 # same_shipping_address = form.cleaned_data.get(
                 #     'same_shipping_address')
                 # save_info = form.cleaned_data.get('save_info')
-                payment_option = form.cleaned_data.get('payment_option')
-                billing_address = BillingAddress(
-                    user=self.request.user,
-                    street_address=street_address,
-                    apartment_address=apartment_address,
-                    country=country,
-                    zip=zip,
-                    address_type='B'
-                )
-                billing_address.save()
+                # payment_option = form.cleaned_data.get('payment_option')
+
+                # billing_address = BillingAddress(
+                #     user=self.request.user,
+                #     street_address=street_address,
+                #     apartment_address=apartment_address,
+                #     # country=country,
+                #     country='ZA',
+                #     zip=zip,
+                #     address_type='B'
+                # )
+                #user_instance=self.request.user
+                # thisAddress = BillingAddress.objects.filter(user_id=user_instance.id).order_by('-default')
+                # print(thisAddress)
+                # billing_address = BillingAddress(
+                #     user=self.request.user,
+                #     street_address=street_address,
+                #     apartment_address=apartment_address,
+                #     # country=country,
+                #     country='ZA',
+                #     zip=zip,
+                #     address_type='B',
+                #     default = True                    
+                # )
+                billing_address = BillingAddress.objects.get(user = self.request.user)
+                # billing_address.street_address =BillingAddress( street_address=street_address)
+                billing_address.save() # TODO This should update not save
+                # shipping_address.save()
                 order.billing_address = billing_address
+                # order.shipping_address = shipping_address
                 order.save()
 
                 # add redirect to the selected payment option
-                if payment_option == 'S':
-                    return redirect('core:payment', payment_option='stripe')
-                elif payment_option == 'P':
-                    return redirect('core:payment', payment_option='paypal')
-                else:
-                    messages.warning(
-                        self.request, "Invalid payment option select")
-                    return redirect('core:checkout')
+                '''
+                Stripe not available in SA
+                Looking at Payfast as an alternative
+                https://www.payfast.co.za/fees
+                https://developers.payfast.co.za/docs#home
+                '''
+                
+                # Changing from Stripe and Paypal to Payfast
+                # ----------->
+                # if payment_option == 'S':
+                #     return redirect('core:payment', payment_option='stripe')
+                # elif payment_option == 'P':
+                #     return redirect('core:payment', payment_option='paypal')
+                # else:
+                #     messages.warning(
+                #         self.request, "Invalid payment option select")
+                #     return redirect('core:checkout')
+                # ----------->
+                return redirect('core:payment', payment_option='payfast')
+            else:
+                print('form not completed')
+                messages.info(self.request, "No form completed ok")
+            return redirect("core:checkout")
+
         except ObjectDoesNotExist:
             messages.error(self.request, "You do not have an active order")
             return redirect("core:order-summary")
-
-
-# def home(request):
-#     context = {
-#         'items': Item.objects.all()
-#     }
-#     return render(request, "index.html", context)
-#
-#
-# def products(request):
-#     context = {
-#         'items': Item.objects.all()
-#     }
-#     return render(request, "product-detail.html", context)
-#
-#
-# def shop(request):
-#     context = {
-#         'items': Item.objects.all()
-#     }
-#     return render(request, "shop.html", context)
+        except TypeError: # Dont think this works
+            messages.info(self.request, "No info received")
+            return redirect("core:checkout")
 
 
 @login_required
@@ -240,6 +361,7 @@ def add_to_cart(request, slug):
         ordered=False
     )
     order_qs = Order.objects.filter(user=request.user, ordered=False)
+   
     if order_qs.exists():
         order = order_qs[0]
         if order.items.filter(item__slug=item.slug).exists():
@@ -275,7 +397,15 @@ def remove_from_cart(request, slug):
                 user=request.user,
                 ordered=False
             )[0]
-            order.items.remove(order_item)
+           
+            ''' The order keeps the qty for some reason '''
+            print('See what the quantities are...')
+            print(order_item.quantity)
+            print(order_item.pk)
+            ''' We want to completely delete the item '''
+            #order.items.delete(order_item)
+            order_item.delete()
+            #order.items.remove(order_item)
             messages.info(request, "Item was removed from your cart.")
             return redirect("core:order-summary")
         else:

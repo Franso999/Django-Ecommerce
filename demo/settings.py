@@ -21,7 +21,10 @@ INSTALLED_APPS = [
     'allauth.socialaccount.providers.google',
     'crispy_forms',
     'django_countries',
-    'core'
+    'core',
+    'django_cleanup.apps.CleanupConfig', # To Remove media when deleted
+    #'phonenumber_field', pip install django-phonenumber-field 
+    # pip install phonenumbers # This one worked, the above still gave import error
 ]
 
 MIDDLEWARE = [
@@ -114,3 +117,6 @@ CRISPY_TEMPLATE_PACK = 'bootstrap4'
 
 STRIPE_PUBLIC_KEY = 'pk_test_lX3r6OMjOU2yzFsNSHq6belT00EY82kZmH'
 STRIPE_SECRET_KEY = 'sk_test_tn0CTDaIJHUJyAqhsf39cfsC00LNjsqDnb'
+
+PHONENUMBER_DB_FORMAT = 'NATIONAL'
+PHONENUMBER_DEFAULT_REGION = 'ZA'

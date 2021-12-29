@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Item, OrderItem, Order, Payment, Coupon, Refund, BillingAddress, Category, Slide
+from .models import Item, OrderItem, Order, Payment, Coupon, Refund, BillingAddress, Category, Slide, ShippingAddress
 
 
 # Register your models here.
@@ -67,6 +67,30 @@ def copy_items(modeladmin, request, queryset):
 
 copy_items.short_description = 'Copy Items'
 
+class BillingAddressAdmin(admin.ModelAdmin):
+    list_display = [
+        'user',
+        'first_name',
+        'last_name',
+        'street_address',
+        'towm_city',
+        'country',
+        'zip',
+        'address_type',
+        'default'
+    ]
+    list_filter = ['default', 'address_type', 'country']
+    search_fields = ['user', 'street_address', 'towm_city', 'zip']
+
+
+def copy_items(modeladmin, request, queryset):
+    for object in queryset:
+        object.id = None
+        object.save()
+
+
+copy_items.short_description = 'Copy Items'
+
 
 class ItemAdmin(admin.ModelAdmin):
     list_display = [
@@ -96,4 +120,5 @@ admin.site.register(Order, OrderAdmin)
 admin.site.register(Payment)
 admin.site.register(Coupon)
 admin.site.register(Refund)
-admin.site.register(BillingAddress, AddressAdmin)
+admin.site.register(BillingAddress, BillingAddressAdmin)
+admin.site.register(ShippingAddress, AddressAdmin)

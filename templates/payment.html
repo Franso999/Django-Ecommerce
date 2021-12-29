@@ -103,7 +103,7 @@ button:hover {
           font-size: 3.5rem;
         }
       }
-      .form-control {
+    .form-control {
     display: block;
     width: 100%;
     height: calc(1.5em + .75rem + 2px);
@@ -124,14 +124,30 @@ button:hover {
   
  
     <div class="container" style="margin-top: 50px;">
+        <h1>Testing Payfast</h1>
+      <form action="https://sandbox.payfast.co.za​/eng/process" method="post">
+      <input type="hidden" name="merchant_id" value="10000100">
+      <input type="hidden" name="merchant_key" value="46f0cd694581a">
 
+      {% comment %} Where to redirect afterwards {% endcomment %}
+      <input type="hidden" name="return_url" value="http://127.0.0.1:8000/payment_success/"> 
+      <input type="hidden" name="cancel_url" value="http://127.0.0.1:8000/payment_cancelled/">
+      <input type="hidden" name="notify_url" value="http://127.0.0.1:8000/payment_error/">
+
+
+      <input type="hidden" name="amount" value="100.00">
+      <input type="hidden" name="item_name" value="Test Product">
+      <input type="submit" class="button-cta" value="PAY NOW">
+    </form>
+    <hr>
 
   <div class="row">
 
 
     <div class="col-md-8 order-md-1 card" >
     	<h4 class="mb-3" style=" margin-top: 26px;">Payment form</h4>
-    
+
+
           <script src="https://js.stripe.com/v3/"></script>
             {% if card %}
               <div style="padding: 5px 30px;">

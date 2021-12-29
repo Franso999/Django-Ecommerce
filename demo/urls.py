@@ -14,3 +14,6 @@ if settings.DEBUG:
                           document_root=settings.STATIC_ROOT)
     urlpatterns += static(settings.MEDIA_URL,
                           document_root=settings.MEDIA_ROOT)
+
+# Change the header in Django Admin
+admin.site.site_header = 'MG Grace Admin'

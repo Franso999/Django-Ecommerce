@@ -4,6 +4,10 @@ from django.db.models import Sum
 from django.shortcuts import reverse
 from django_countries.fields import CountryField
 
+from django.contrib.auth.models import User
+from django.db.models.signals import post_save
+from phonenumber_field.modelfields import PhoneNumberField
+
 # Create your models here.
 CATEGORY_CHOICES = (
     ('SB', 'Shirts And Blouses'),
@@ -23,6 +27,25 @@ ADDRESS_CHOICES = (
     ('S', 'Shipping'),
 )
 
+# class UserProfile(models.Model,):
+#     user = models.OneToOneField(User, on_delete=models.CASCADE)
+#     first_name = models.CharField(max_length = 30, default='',  blank=True, null=True)
+#     last_name = models.CharField(max_length = 30, default='',  blank=True, null=True)
+#     # Personal Details
+#     company_name = models.CharField(max_length=100, default='',  blank=True, null=True)
+#     email = models.EmailField(max_length=100, blank=True, null=True)
+#     contact_landline = PhoneNumberField(default='', blank=True, null=True)
+#     contact_mobile = PhoneNumberField(default='', blank=True, null=True)
+#     address = models.CharField(max_length=200, default='',  blank=True, null=True)
+#     address_2 = models.CharField(max_length=200, default='',  blank=True, null=True)
+#     city = models.CharField(max_length=200, default='',  blank=True, null=True)
+#     province = models.CharField(max_length=200, default='',  blank=True, null=True)
+#     zip = models.CharField(max_length=200, default='',  blank=True, null=True)
+#     position  = models.CharField(max_length=100, default='',  blank=True, null=True)
+    
+#     # Displays The username in admin panel
+#     def __str__(self):
+#         return self.user.username
 
 class Slide(models.Model):
     caption1 = models.CharField(max_length=100)
@@ -49,11 +72,11 @@ class Category(models.Model):
             'slug': self.slug
         })
 
-
 class Item(models.Model):
     title = models.CharField(max_length=100)
     price = models.FloatField()
-    discount_price = models.FloatField(blank=True, null=True)
+    qty = models.IntegerField(blank=True, null=True,)
+    discount_price = models.FloatField(blank=True, null=True, verbose_name= 'Discount Price DO NOT USE!')
     category = models.ForeignKey(Category, on_delete=models.CASCADE)
     label = models.CharField(choices=LABEL_CHOICES, max_length=1)
     slug = models.SlugField()
@@ -81,7 +104,6 @@ class Item(models.Model):
             'slug': self.slug
         })
 
-
 class OrderItem(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL,
                              on_delete=models.CASCADE)
@@ -105,7 +127,6 @@ class OrderItem(models.Model):
         if self.item.discount_price:
             return self.get_total_discount_item_price()
         return self.get_total_item_price()
-
 
 class Order(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL,
@@ -149,8 +170,25 @@ class Order(models.Model):
             total -= self.coupon.amount
         return total
 
-
 class BillingAddress(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    first_name = models.CharField(max_length=100, blank=True, null=True)
+    last_name = models.CharField(max_length=100, blank=True, null=True)
+    street_address = models.CharField(max_length=100)
+    towm_city = models.CharField(max_length=100, verbose_name='City/Town')
+    country = CountryField(multiple=False)
+    zip = models.CharField(max_length=100)
+    mobile_number = PhoneNumberField(default='', blank=True, null=True)
+    address_type = models.CharField(max_length=1, choices=ADDRESS_CHOICES)
+    default = models.BooleanField(default=False)
+
+    def __str__(self):
+        return self.user.username
+
+    class Meta:
+        verbose_name_plural = 'Billing Addresses & Buyers Details'
+
+class ShippingAddress(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL,
                              on_delete=models.CASCADE)
     street_address = models.CharField(max_length=100)
@@ -164,8 +202,7 @@ class BillingAddress(models.Model):
         return self.user.username
 
     class Meta:
-        verbose_name_plural = 'BillingAddresses'
-
+        verbose_name_plural = 'Shipping Addresses - DO NOT USE'
 
 class Payment(models.Model):
     stripe_charge_id = models.CharField(max_length=50)
@@ -194,3 +231,5 @@ class Refund(models.Model):
 
     def __str__(self):
         return f"{self.pk}"
+    class Meta:
+        verbose_name_plural = 'Refunds - NOT READY YET'
